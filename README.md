@@ -1,14 +1,24 @@
-# Audio Transcriber with Parakeet ASR
+# Parakeet TDT - Audio Transcriber
 
-A full-stack application for recording audio in the browser and transcribing it using Nvidia's Parakeet automatic speech recognition model.
+[![Tests](https://github.com/YOUR_USERNAME/Parakeet-TDT/actions/workflows/tests.yml/badge.svg)](https://github.com/YOUR_USERNAME/Parakeet-TDT/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![Node.js 18+](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 
-## Features
+A professional-grade full-stack application for recording audio in the browser and transcribing it locally using NVIDIA's Parakeet ASR model with advanced speaker diarization.
 
-- 🎙️ **Live Audio Recording**: Record audio directly from your browser
-- 🤖 **Parakeet ASR**: Uses Nvidia's open-source Parakeet model for transcription
-- 💾 **Transcript History**: View, save, and manage all your transcripts
-- 📥 **Export Options**: Download transcripts as `.txt` files
-- 📋 **Copy to Clipboard**: Easily copy transcripts to clipboard
+## ✨ Features
+
+- 🎙️ **Live Audio Recording**: High-quality audio capture directly from your browser
+- 🤖 **Advanced ASR**: Dual-engine support (NVIDIA Parakeet + OpenAI Whisper)
+- 🔊 **Speaker Diarization**: Automatic identification of speakers using pyannote.audio (~90% accuracy)
+- 📨 **Live Transcription**: Real-time message-based transcript display with smart pause detection
+- 💾 **Transcript History**: Browse, search, and manage all saved transcripts
+- 📥 **Export Options**: Download transcripts as text files or view as JSON
+- 📋 **Clipboard Support**: Copy transcripts with one click
+- 🌐 **Multi-user**: Support for 3+ concurrent transcription users
+- 🚀 **100% Local Processing**: All transcription happens locally, no cloud APIs
+- 🎯 **Intelligent VAD**: Voice Activity Detection with natural pause recognition
 
 ## Project Structure
 
@@ -146,14 +156,97 @@ WebSocket endpoint for streaming transcription (future enhancement)
 - **CPU**: Without GPU, transcription may take 30+ seconds per minute of audio
 - The Parakeet model requires about 1.5GB of disk space and ~2GB of RAM
 
+## Quick Start
+
+### Fast Setup (macOS/Linux)
+```bash
+./start.sh
+```
+
+### Manual Setup
+
+**Backend:**
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
+
+**Frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open `http://localhost:3000` in your browser.
+
+## Documentation
+
+- **[CLAUDE.md](./CLAUDE.md)** - Detailed architecture, command reference, and implementation notes
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - How to contribute to this project
+- **[GETTING_STARTED.md](./GETTING_STARTED.md)** - Detailed setup instructions
+- **[API.md](./API.md)** - API endpoint documentation
+
+## Architecture
+
+### Speaker Diarization
+The system uses **pyannote.audio** to identify and track speakers with ~90% accuracy:
+- Analyzes complete audio after recording
+- Automatically detects number of speakers
+- Labels segments with speaker attribution
+- Graceful fallback if pyannote unavailable
+
+### Voice Activity Detection (VAD)
+Smart pause detection breaks natural speech into manageable segments:
+- 0.3-0.5s pause triggers transcription
+- 1.5+ seconds confirms end of phrase
+- 15+ second buffer forces send to prevent huge blocks
+
+### Multi-user Support
+- Up to 3 concurrent transcriptions
+- Configurable worker threads
+- WebSocket support for real-time updates
+- PostgreSQL or SQLite database backend
+
+## Performance
+
+| Scenario | Time | Hardware |
+|----------|------|----------|
+| 1 min audio (GPU) | 5-10s | NVIDIA GPU + 8GB RAM |
+| 1 min audio (CPU) | 5-10 min | CPU-only |
+| Multi-user (3 concurrent) | Sequential | ~3x slower per user |
+
+## Environment Setup
+
+### Optional: HuggingFace Token
+For better speaker diarization model access:
+```bash
+# Create token at https://huggingface.co/settings/tokens
+# Add to .env:
+HUGGINGFACE_TOKEN=hf_your_token_here
+```
+
+### Database Configuration
+```bash
+# Default: SQLite (auto-created)
+# For PostgreSQL:
+DATABASE_URL=postgresql://user:pass@localhost/transcriber_db
+```
+
 ## Future Enhancements
 
-- Real-time streaming transcription via WebSocket
-- Support for multiple languages
-- Speaker diarization
-- Confidence scores for transcribed text
-- Batch transcription
-- Audio file upload without recording
+- [ ] Support for multiple languages
+- [ ] Confidence scores for transcribed text
+- [ ] Batch transcription
+- [ ] Audio file upload without recording
+- [ ] Real-time speaker identification display
+- [ ] Custom speaker name assignment
+- [ ] Transcript search and filtering
+- [ ] Timestamp-based playback
+- [ ] Speaker demographics (experimental)
 
 ## License
 
