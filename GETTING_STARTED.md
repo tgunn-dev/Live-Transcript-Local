@@ -18,10 +18,12 @@ A full-stack audio transcription application with:
 
 ### Step 1: Open Terminal
 
-Navigate to your project:
+Navigate to your project directory:
 ```bash
-cd /Users/tgunn/PycharmProjects/"Parakeet TDT"
+cd path/to/Parakeet-TDT
 ```
+
+(Replace `path/to/Parakeet-TDT` with wherever you cloned the repository)
 
 ### Step 2: Run Everything
 
@@ -136,12 +138,25 @@ chmod +x start.sh
 
 ### Port 8000 already in use
 
+**On macOS/Linux:**
 ```bash
 # Check what's using it
 lsof -i :8000
 
 # Kill the process
 kill -9 <PID>
+
+# Or use a different port
+uvicorn main:app --port 8001
+```
+
+**On Windows:**
+```bash
+# Find what's using port 8000
+netstat -ano | findstr :8000
+
+# Kill the process (replace PID with the number from above)
+taskkill /PID <PID> /F
 
 # Or use a different port
 uvicorn main:app --port 8001
