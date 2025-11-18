@@ -2,9 +2,11 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and build tools
 RUN apt-get update && apt-get install -y \
+    build-essential \
     libsndfile1 \
+    libsndfile1-dev \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
