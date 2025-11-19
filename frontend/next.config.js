@@ -13,6 +13,19 @@ const nextConfig = {
       },
     ])
 
+    // Add rule to suppress onnxruntime-web warnings at compilation level
+    config.plugins = (config.plugins || []).concat([
+      {
+        apply: (compiler) => {
+          compiler.hooks.compilation.tap('SuppressOnnxWarnings', (compilation) => {
+            compilation.warnings = compilation.warnings.filter(
+              (warning) => !warning.message?.includes('onnxruntime-web')
+            )
+          })
+        },
+      },
+    ])
+
     // Handle VAD worklet file
     config.module.rules.push({
       test: /vad\.worklet\.js$/,
