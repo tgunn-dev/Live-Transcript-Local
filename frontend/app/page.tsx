@@ -14,7 +14,7 @@ export default function Home() {
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      router.push("/pages/login");
+      router.push("/login");
     }
   }, [isAuthenticated, isLoading, router]);
 
@@ -25,7 +25,7 @@ export default function Home() {
 
   const handleLogout = () => {
     logout();
-    router.push("/pages/login");
+    router.push("/login");
   };
 
   if (isLoading) {
