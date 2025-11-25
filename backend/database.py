@@ -73,24 +73,36 @@ def init_db():
                 from sqlalchemy import text
                 db = SessionLocal()
                 try:
+                    print("⏳ Adding user_id column to transcripts table...", flush=True)
                     db.execute(text('ALTER TABLE transcripts ADD COLUMN user_id TEXT'))
                     db.commit()
                     print("✓ Added user_id column to transcripts table", flush=True)
                 except Exception as col_error:
                     db.rollback()
-                    print(f"⚠️ Could not add user_id column (may already exist): {col_error}", flush=True)
+                    if "duplicate column name" in str(col_error).lower() or "already exists" in str(col_error).lower():
+                        print("✓ user_id column already exists", flush=True)
+                    else:
+                        print(f"❌ Error adding user_id column: {col_error}", flush=True)
+                        raise  # Re-raise to prevent app startup if schema migration fails
                 finally:
                     db.close()
         except Exception as e:
-            print(f"⚠️ Error checking transcripts schema: {e}", flush=True)
+            print(f"❌ Error checking transcripts schema: {e}", flush=True)
+            raise  # Re-raise to prevent app startup on schema errors
 
-# Try to initialize, but don't fail if it errors (another worker might be doing it)
+# Try to initialize, but handle errors gracefully
 try:
     init_db()
 except Exception as e:
-    # Log but don't fail - another worker might be initializing
+    # Log but allow app to continue - column may already exist
     import sys
-    print(f"⚠️ Note: Database initialization encountered: {e}", file=sys.stderr)
+    error_str = str(e).lower()
+    if "duplicate column" in error_str or "already exists" in error_str:
+        # Column already exists, this is fine
+        print(f"✓ Database schema is current", flush=True)
+    else:
+        # Other errors - log but continue (another worker might be initializing)
+        print(f"⚠️ Database initialization encountered: {e}", file=sys.stderr, flush=True)
 
 
 def get_db():
