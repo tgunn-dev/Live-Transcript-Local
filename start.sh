@@ -53,7 +53,7 @@ fi
 
 # Start backend server
 echo -e "${GREEN}Starting FastAPI backend...${NC}"
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
+uvicorn main:app --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 echo -e "${GREEN}Backend started (PID: $BACKEND_PID)${NC}"
 
