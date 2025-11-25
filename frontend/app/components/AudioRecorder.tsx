@@ -538,28 +538,58 @@ export default function AudioRecorder({
   };
 
   const startStandardRecording = (stream: MediaStream) => {
-    const mediaRecorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = mediaRecorder;
-    audioChunksRef.current = [];
+    // Use client-side transcription if available and enabled, otherwise fall back to server
+    if (useClientSideTranscription && isTranscriberReady()) {
+      // Client-side mode: record and transcribe locally
+      console.log("🌐 Starting client-side transcription recording");
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
 
-    mediaRecorder.ondataavailable = (event) => {
-      audioChunksRef.current.push(event.data);
-    };
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
 
-    mediaRecorder.onstop = async () => {
-      const audioBlob = new Blob(audioChunksRef.current, {
-        type: "audio/wav",
-      });
-      await sendAudioForTranscription(audioBlob);
-      stream.getTracks().forEach((track) => track.stop());
-    };
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/wav",
+        });
+        setIsProcessing(true);
+        setTranscript("🔄 Transcribing audio on your device...");
+        await sendAudioForTranscription(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
 
-    mediaRecorder.start();
-    setIsRecording(true);
-    setRecordingTime(0);
-    // Don't clear transcript - keep meeting transcript visible
-    // setTranscript("");
-    setIsProcessing(false);
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      setIsProcessing(false);
+    } else {
+      // Server-side fallback mode
+      console.log("🔌 Starting server-side transcription recording");
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/wav",
+        });
+        setIsProcessing(true);
+        setTranscript("⏳ Sending to server for transcription...");
+        await sendAudioForTranscription(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      setIsProcessing(false);
+    }
   };
 
   const stopRecording = () => {
