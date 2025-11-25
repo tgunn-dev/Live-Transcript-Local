@@ -42,6 +42,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             localStorage.removeItem("auth_token");
             setToken(null);
           }
+        } else {
+          // No token, we're done loading immediately
+          setIsLoading(false);
+          return;
         }
       } catch (error) {
         console.error("Auth initialization error:", error);
