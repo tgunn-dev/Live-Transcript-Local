@@ -17,6 +17,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 1gb
+    mem_reservation: 512mb
 
   backend:
     build:
@@ -33,13 +35,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120
+    command: gunicorn main:app --workers 2 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 60s
       timeout: 60s
       retries: 3
       start_period: 120s
+    mem_limit: 8gb
+    mem_reservation: 6gb
     # GPU Support: Uncomment the following lines if you have NVIDIA GPU
     # and nvidia-container-runtime installed. See DOCKER_GPU_SETUP.md for details.
     # runtime: nvidia

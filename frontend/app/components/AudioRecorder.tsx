@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import TranscriptMessages from "./TranscriptMessages";
+import { initializeTranscriber, transcribeAudio, isTranscriberReady } from "@/app/utils/clientTranscription";
 
 interface AudioRecorderProps {
   onTranscriptionComplete: (transcript: string) => void;
@@ -31,7 +32,9 @@ export default function AudioRecorder({
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("default");
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
   const [captureMicWithSystem, setCaptureMicWithSystem] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>("parakeet-tdt-0.6b-v3");
+  const [selectedModel, setSelectedModel] = useState<string>("whisper-tiny");
+  const [modelLoading, setModelLoading] = useState(false);
+  const [useClientSideTranscription, setUseClientSideTranscription] = useState(true);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -39,6 +42,26 @@ export default function AudioRecorder({
   const websocketRef = useRef<WebSocket | null>(null);
   const recordingTitleRef = useRef<string>("");
   const accumulatedTranscriptRef = useRef<string>("");
+
+  // Initialize client-side transcriber on mount
+  useEffect(() => {
+    if (useClientSideTranscription && !isTranscriberReady()) {
+      const initTranscriber = async () => {
+        try {
+          setModelLoading(true);
+          await initializeTranscriber();
+          console.log("✓ Client-side transcriber ready");
+        } catch (error) {
+          console.error("Failed to load client-side transcriber:", error);
+          setUseClientSideTranscription(false);
+        } finally {
+          setModelLoading(false);
+        }
+      };
+
+      initTranscriber();
+    }
+  }, [useClientSideTranscription]);
 
   // Load available audio devices on mount
   useEffect(() => {
@@ -553,29 +576,78 @@ export default function AudioRecorder({
 
   const sendAudioForTranscription = async (audioBlob: Blob) => {
     try {
+      // Use client-side transcription if available
+      if (useClientSideTranscription && isTranscriberReady()) {
+        console.log("🌐 Using client-side transcription (runs locally on your device)");
+
+        // Convert blob to audio buffer
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+        // Extract mono audio data
+        const rawData = audioBuffer.getChannelData(0);
+        console.log(`📊 Audio: ${(audioBuffer.duration).toFixed(2)}s @ ${audioBuffer.sampleRate}Hz`);
+
+        // Transcribe using client-side model
+        const text = await transcribeAudio(rawData, audioBuffer.sampleRate);
+        setTranscript(text || "(No speech detected)");
+        onTranscriptionComplete(text);
+
+        // Optionally save to server for history
+        await saveTranscriptToServer(text);
+      } else {
+        // Fallback to server-side transcription
+        console.log("🔌 Using server-side transcription");
+        const formData = new FormData();
+        formData.append("file", audioBlob, "recording.wav");
+        formData.append("title", `Recording - ${new Date().toLocaleString()}`);
+        formData.append("model", selectedModel);
+
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await axios.post(
+          `${apiUrl}/transcribe`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
+
+        setTranscript(response.data.content);
+        onTranscriptionComplete(response.data.content);
+      }
+    } catch (error) {
+      console.error("Transcription error:", error);
+      setTranscript(`Error transcribing audio: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const saveTranscriptToServer = async (transcriptText: string) => {
+    try {
       const formData = new FormData();
-      formData.append("file", audioBlob, "recording.wav");
       formData.append("title", `Recording - ${new Date().toLocaleString()}`);
-      formData.append("model", selectedModel);
+      formData.append("content", transcriptText);
 
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await axios.post(
-        `${apiUrl}/transcribe`,
-        formData,
+
+      // Save to server for history (but don't require success)
+      await axios.post(
+        `${apiUrl}/save-transcript`,
+        { title: `Recording - ${new Date().toLocaleString()}`, content: transcriptText },
         {
           headers: {
-            "Content-Type": "multipart/form-data",
+            "Content-Type": "application/json",
           },
         }
       );
 
-      setTranscript(response.data.content);
-      onTranscriptionComplete(response.data.content);
+      console.log("✓ Transcript saved to server history");
     } catch (error) {
-      console.error("Transcription error:", error);
-      setTranscript("Error transcribing audio. Please try again.");
-    } finally {
-      setIsProcessing(false);
+      console.warn("Could not save to server history (non-critical):", error);
     }
   };
 
@@ -722,68 +794,124 @@ export default function AudioRecorder({
         </div>
       )}
 
+      {/* Transcription Mode Selection */}
+      <div className="mb-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+        <label className="block text-sm font-semibold text-gray-800 mb-3">
+          🌐 Transcription Mode
+        </label>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setUseClientSideTranscription(true)}
+            disabled={isRecording || modelLoading}
+            className={`flex-1 p-3 rounded-lg border-2 transition-all duration-200 ${
+              useClientSideTranscription
+                ? "border-green-500 bg-green-100 shadow-md"
+                : "border-gray-200 bg-white hover:border-green-300 hover:bg-green-50"
+            } ${isRecording || modelLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div className="text-left">
+              <p className="font-bold text-gray-900 text-sm">💻 Client-Side</p>
+              <p className="text-xs text-gray-600">Fast, Private, Offline</p>
+              {modelLoading && useClientSideTranscription && (
+                <p className="text-green-600 text-xs mt-1">Loading model...</p>
+              )}
+            </div>
+          </button>
+
+          <button
+            onClick={() => setUseClientSideTranscription(false)}
+            disabled={isRecording}
+            className={`flex-1 p-3 rounded-lg border-2 transition-all duration-200 ${
+              !useClientSideTranscription
+                ? "border-blue-500 bg-blue-100 shadow-md"
+                : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+            } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div className="text-left">
+              <p className="font-bold text-gray-900 text-sm">🔌 Server</p>
+              <p className="text-xs text-gray-600">More Accurate, Uses CPU</p>
+            </div>
+          </button>
+        </div>
+      </div>
+
       {/* Model Selection */}
       <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
         <label className="block text-sm font-semibold text-gray-800 mb-3">
           🧠 Transcription Model
         </label>
 
-        {/* NVIDIA Parakeet Models - Primary Options */}
-        <p className="text-xs font-semibold text-purple-700 mb-2 uppercase">⚡ Recommended (NVIDIA Parakeet)</p>
-        <div className="grid grid-cols-2 gap-2 mb-4">
-          <button
-            onClick={() => setSelectedModel("parakeet-tdt-0.6b-v3")}
-            disabled={isRecording}
-            className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-              selectedModel === "parakeet-tdt-0.6b-v3"
-                ? "border-purple-500 bg-purple-100 shadow-md"
-                : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
-            } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-          >
-            <div className="text-left">
-              <p className="font-bold text-gray-900 text-sm">0.6B V3 ⭐</p>
-              <p className="text-xs text-gray-600">Fastest</p>
-              {selectedModel === "parakeet-tdt-0.6b-v3" && (
-                <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
-              )}
-            </div>
-          </button>
+        {useClientSideTranscription ? (
+          <>
+            <p className="text-xs font-semibold text-green-700 mb-2 uppercase">🌐 Client-Side (Runs in Browser)</p>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isRecording || modelLoading}
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="whisper-tiny">Whisper Tiny (Fastest, ~75MB)</option>
+              <option value="whisper-base">Whisper Base (Balanced, ~140MB)</option>
+              <option value="whisper-small">Whisper Small (Better accuracy, ~490MB)</option>
+            </select>
+            <p className="text-xs text-gray-600 mt-2">
+              ✓ Audio processed on your device • No data sent to server • Works offline after first load
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-xs font-semibold text-blue-700 mb-2 uppercase">🔌 Server-Side (Runs on Server)</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                onClick={() => setSelectedModel("parakeet-tdt-0.6b-v3")}
+                disabled={isRecording}
+                className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                  selectedModel === "parakeet-tdt-0.6b-v3"
+                    ? "border-purple-500 bg-purple-100 shadow-md"
+                    : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
+                } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <div className="text-left">
+                  <p className="font-bold text-gray-900 text-sm">Parakeet 0.6B ⭐</p>
+                  <p className="text-xs text-gray-600">Fastest</p>
+                  {selectedModel === "parakeet-tdt-0.6b-v3" && (
+                    <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
+                  )}
+                </div>
+              </button>
 
-          <button
-            onClick={() => setSelectedModel("parakeet-tdt-1.1b")}
-            disabled={isRecording}
-            className={`p-3 rounded-lg border-2 transition-all duration-200 ${
-              selectedModel === "parakeet-tdt-1.1b"
-                ? "border-purple-500 bg-purple-100 shadow-md"
-                : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
-            } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-          >
-            <div className="text-left">
-              <p className="font-bold text-gray-900 text-sm">1.1B</p>
-              <p className="text-xs text-gray-600">More accurate</p>
-              {selectedModel === "parakeet-tdt-1.1b" && (
-                <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
-              )}
+              <button
+                onClick={() => setSelectedModel("parakeet-tdt-1.1b")}
+                disabled={isRecording}
+                className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+                  selectedModel === "parakeet-tdt-1.1b"
+                    ? "border-purple-500 bg-purple-100 shadow-md"
+                    : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
+                } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <div className="text-left">
+                  <p className="font-bold text-gray-900 text-sm">Parakeet 1.1B</p>
+                  <p className="text-xs text-gray-600">More accurate</p>
+                  {selectedModel === "parakeet-tdt-1.1b" && (
+                    <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
+                  )}
+                </div>
+              </button>
             </div>
-          </button>
-        </div>
 
-        {/* Alternative Models */}
-        <p className="text-xs font-semibold text-indigo-700 mb-2 uppercase">🤖 Alternatives</p>
-        <select
-          value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          disabled={isRecording}
-          className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white"
-        >
-          <option value="parakeet-ctc-0.6b">Parakeet CTC 0.6B (older, faster)</option>
-          <option value="parakeet-ctc-1.1b">Parakeet CTC 1.1B (older, more accurate)</option>
-          <option value="whisper-tiny">Whisper Tiny (fastest, least accurate)</option>
-          <option value="whisper-base">Whisper Base (balanced)</option>
-          <option value="whisper-small">Whisper Small (better accuracy)</option>
-          <option value="whisper-medium">Whisper Medium (high accuracy)</option>
-          <option value="whisper-large">Whisper Large (most accurate, slowest)</option>
-        </select>
+            <select
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={isRecording}
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white"
+            >
+              <option value="parakeet-ctc-0.6b">Parakeet CTC 0.6B (older, faster)</option>
+              <option value="parakeet-ctc-1.1b">Parakeet CTC 1.1B (older, more accurate)</option>
+              <option value="whisper-tiny">Whisper Tiny (CPU-based fallback)</option>
+              <option value="whisper-base">Whisper Base (CPU-based fallback)</option>
+            </select>
+          </>
+        )}
       </div>
 
       {/* Info */}

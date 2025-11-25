@@ -11,6 +11,10 @@ const nextConfig = {
       {
         message: /vad\.worklet/,
       },
+      {
+        module: /onnxruntime-node/,
+        message: /Critical dependency/,
+      },
     ])
 
     // Add rule to suppress onnxruntime-web warnings at compilation level
@@ -19,7 +23,7 @@ const nextConfig = {
         apply: (compiler) => {
           compiler.hooks.compilation.tap('SuppressOnnxWarnings', (compilation) => {
             compilation.warnings = compilation.warnings.filter(
-              (warning) => !warning.message?.includes('onnxruntime-web')
+              (warning) => !warning.message?.includes('onnxruntime-web') && !warning.message?.includes('onnxruntime-node')
             )
           })
         },
@@ -31,6 +35,21 @@ const nextConfig = {
       test: /vad\.worklet\.js$/,
       type: 'webassembly/async',
     })
+
+    // Exclude onnxruntime-node bindings from browser build (only used server-side)
+    if (!isServer) {
+      // Ignore .node files in browser bundle (Node.js native bindings)
+      config.module.rules.push({
+        test: /\.node$/,
+        use: 'ignore-loader',
+      })
+
+      // Also need to handle the onnxruntime-node module entirely
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        'onnxruntime-node': false,
+      }
+    }
 
     return config
   },

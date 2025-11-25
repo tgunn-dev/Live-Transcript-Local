@@ -743,6 +743,42 @@ async def save_transcript(
         raise Exception(f"Failed to save transcript: {str(e)}")
 
 
+@app.post("/save-transcript")
+async def save_transcript(payload: dict = Body(...), db: Session = Depends(get_db)):
+    """
+    Save a transcript (from client-side transcription)
+    This endpoint allows client-side transcription results to be saved for history
+    """
+    try:
+        title = payload.get("title", f"Recording - {time.strftime('%Y-%m-%d %H:%M:%S')}")
+        content = payload.get("content", "")
+
+        if not content or content.strip() == "":
+            return {"message": "No transcript content to save"}
+
+        # Create new transcript record
+        db_transcript = Transcript(
+            title=title,
+            content=content,
+            duration=0,  # Duration not available from client-side transcription
+            segments=json.dumps([])  # Empty segments for client-side transcriptions
+        )
+
+        db.add(db_transcript)
+        db.commit()
+        db.refresh(db_transcript)
+
+        return {
+            "id": db_transcript.id,
+            "title": db_transcript.title,
+            "content": db_transcript.content,
+            "message": "Transcript saved successfully"
+        }
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e), "message": "Failed to save transcript"}
+
+
 @app.delete("/transcripts/{transcript_id}")
 async def delete_transcript(transcript_id: int, db: Session = Depends(get_db)):
     """
