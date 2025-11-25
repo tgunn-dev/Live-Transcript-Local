@@ -378,6 +378,47 @@ uvicorn main:app --port 8001
 - Check CORS origins in `main.py` match frontend URL
 - Browser console shows actual error
 
+## Docker Troubleshooting
+
+For complete Docker setup and troubleshooting, see:
+- **Quick Start**: [DOCKER_QUICK_START.md](DOCKER_QUICK_START.md) - Get running in 5 minutes
+- **GPU Setup**: [DOCKER_GPU_SETUP.md](DOCKER_GPU_SETUP.md) - Enable NVIDIA GPU acceleration
+- **Production**: [docker-compose.prod.yml](docker-compose.prod.yml) - Production-ready configuration
+
+**Docker-specific issues**:
+
+**"Cannot connect to backend from frontend"**:
+- Wait 30-60 seconds (models are downloading on first run)
+- Check backend health: `docker logs parakeet-backend`
+- Verify containers running: `docker-compose ps`
+- Ensure `NEXT_PUBLIC_API_URL=http://backend:8000` in docker-compose.yml
+
+**"Docker daemon not running"**:
+- **macOS/Windows**: Open Docker Desktop
+- **Linux**: `sudo systemctl start docker`
+
+**"Permission denied" on Linux**:
+```bash
+sudo usermod -aG docker $USER
+# Log out and back in
+```
+
+**"Out of disk space"**:
+- Models and containers take ~3-5GB
+- Check: `docker system df`
+- Clean up: `docker system prune -a`
+
+**Models not downloading**:
+- Check internet connection
+- First run may take 5-10 minutes for ~1.5GB download
+- Monitor: `docker logs -f parakeet-backend`
+- If stuck, restart: `docker-compose restart backend`
+
+**GPU not being used (even with nvidia-docker)**:
+- See [DOCKER_GPU_SETUP.md](DOCKER_GPU_SETUP.md)
+- Verify runtime is set: `docker-compose config | grep runtime`
+- Check GPU: `docker exec parakeet-backend nvidia-smi`
+
 ## Resources
 
 - **Next.js Docs**: https://nextjs.org/docs

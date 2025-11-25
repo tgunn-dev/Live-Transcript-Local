@@ -1,0 +1,79 @@
+version: '3.8'
+
+# Production Docker Compose Configuration
+# =========================================
+# Usage: docker-compose -f docker-compose.prod.yml up -d
+# This configuration optimizes for production deployment:
+# - Runs Next.js in production mode
+# - No hot-reloading or development overhead
+# - Single-process backend (add reverse proxy for scaling)
+# - PostgreSQL recommended for concurrent access
+# - Proper health checks and restart policies
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: parakeet-backend-prod
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/parakeet
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./backend:/app
+      - transcripts_data:/app/data
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --workers 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: parakeet-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  # PostgreSQL Database (recommended for production)
+  # Uncomment to use PostgreSQL instead of SQLite
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: parakeet-db
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: parakeet
+  #     POSTGRES_PASSWORD: secure_password_here
+  #     POSTGRES_DB: parakeet
+  #   volumes:
+  #     - db_data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U parakeet"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #   ports:
+  #     - "5432:5432"
+
+volumes:
+  transcripts_data:
+  # db_data:
+
+networks:
+  default:
+    name: parakeet-network

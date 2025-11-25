@@ -5,15 +5,24 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: parakeet-backend
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=sqlite:///./transcripts.db
+      - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
       - ./backend/transcripts.db:/app/transcripts.db
     command: uvicorn main:app --reload --host 0.0.0.0 --port 8000
-    # Uncomment for GPU support
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # GPU Support: Uncomment the following lines if you have NVIDIA GPU
+    # and nvidia-container-runtime installed. See DOCKER_GPU_SETUP.md for details.
     # runtime: nvidia
     # environment:
     #   - CUDA_VISIBLE_DEVICES=0
@@ -22,10 +31,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: parakeet-frontend
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://backend:8000
     depends_on:
-      - backend
-    command: npm run dev -- -H 0.0.0.0
+      backend:
+        condition: service_healthy
+    command: npm start
