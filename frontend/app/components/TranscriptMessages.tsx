@@ -33,11 +33,18 @@ export default function TranscriptMessages({
     return scrollHeight - scrollTop - clientHeight < 50;
   };
 
-  // Auto-scroll to bottom when new messages arrive (only if user is at bottom)
+  // Auto-scroll to bottom with smooth animation when new messages arrive
   const scrollToBottom = () => {
     if (!isUserScrolledUp && containerRef.current) {
-      // Scroll within the container, not the entire page
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      // Use requestAnimationFrame for smooth scrolling
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      });
     }
   };
 
@@ -46,10 +53,11 @@ export default function TranscriptMessages({
     setIsUserScrolledUp(!isAtBottom());
   };
 
+  // Auto-scroll when new messages arrive
   useEffect(() => {
     scrollToBottom();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, isUserScrolledUp]);
+  }, [messages]);
 
   if (messages.length === 0) {
     return (
@@ -61,12 +69,38 @@ export default function TranscriptMessages({
 
   return (
     <div className="relative w-full h-full flex flex-col">
+      {/* Listening Indicator - only show when recording */}
+      {isRecording && (
+        <div className="flex items-center justify-center gap-3 px-4 py-4 bg-gradient-to-r from-red-500 via-red-600 to-red-700 shadow-md">
+          {/* Animated pulse circle background */}
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-8 h-8 bg-red-400 rounded-full animate-pulse opacity-75"></div>
+            <div className="relative w-4 h-4 bg-white rounded-full shadow-lg"></div>
+          </div>
+
+          {/* Animated sound waves */}
+          <div className="flex items-center gap-0.5">
+            <div className="w-1 h-6 bg-white rounded-full opacity-40 animate-pulse" style={{animationDelay: '0s'}}></div>
+            <div className="w-1 h-8 bg-white rounded-full opacity-60 animate-pulse" style={{animationDelay: '0.1s'}}></div>
+            <div className="w-1 h-10 bg-white rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+            <div className="w-1 h-8 bg-white rounded-full opacity-60 animate-pulse" style={{animationDelay: '0.3s'}}></div>
+            <div className="w-1 h-6 bg-white rounded-full opacity-40 animate-pulse" style={{animationDelay: '0.4s'}}></div>
+          </div>
+
+          {/* Text */}
+          <span className="text-sm font-semibold text-white tracking-wider">LISTENING</span>
+        </div>
+      )}
+
       {/* Scroll to bottom button (appears when scrolled up) */}
       {isUserScrolledUp && (
         <button
           onClick={() => {
             if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+              containerRef.current.scrollTo({
+                top: containerRef.current.scrollHeight,
+                behavior: 'smooth'
+              });
               setIsUserScrolledUp(false);
             }
           }}
@@ -79,7 +113,7 @@ export default function TranscriptMessages({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="w-full h-full flex flex-col overflow-y-auto bg-gray-50"
+        className="w-full flex-1 flex flex-col overflow-y-auto bg-gray-50"
       >
         {/* Messages displayed in order (oldest to newest) */}
         <div className="flex flex-col gap-3 p-4 w-full">

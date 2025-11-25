@@ -99,6 +99,36 @@ async def root():
     return {"message": "Audio Transcriber API is running"}
 
 
+def resample_audio_to_16khz(audio_path: str) -> str:
+    """
+    Resample audio file to 16kHz (required by Parakeet)
+    Returns path to the resampled audio file
+    """
+    import librosa
+    import soundfile as sf
+
+    try:
+        # Load audio at original sample rate
+        audio, sr = librosa.load(audio_path, sr=None, mono=True)
+
+        # If already 16kHz, return original path
+        if sr == 16000:
+            return audio_path
+
+        # Resample to 16kHz
+        audio_16k = librosa.resample(audio, orig_sr=sr, target_sr=16000)
+
+        # Save to temporary file
+        resampled_path = audio_path.replace('.wav', '_16k.wav')
+        sf.write(resampled_path, audio_16k, 16000)
+
+        print(f"🔄 Resampled audio from {sr}Hz to 16kHz")
+        return resampled_path
+    except Exception as e:
+        print(f"⚠️  Resampling failed, trying original audio: {e}")
+        return audio_path
+
+
 def transcribe_with_parakeet(audio_path: str, model_name: str = "parakeet-1.1b-ctc-greedy") -> str:
     """
     Transcribe audio using Parakeet model (runs locally)
@@ -162,10 +192,13 @@ def transcribe_with_parakeet(audio_path: str, model_name: str = "parakeet-1.1b-c
         else:
             parakeet_model = parakeet_model_cache[full_model_name]
             # Don't print every time to reduce noise - only on first use
-        
+
+        # Resample audio to 16kHz (required by Parakeet)
+        audio_path_16k = resample_audio_to_16khz(audio_path)
+
         # Transcribe
         with torch.no_grad():
-            transcribed_text = parakeet_model.transcribe([audio_path])
+            transcribed_text = parakeet_model.transcribe([audio_path_16k])
         
         # Extract text from result (may be Hypothesis object or string)
         if transcribed_text and len(transcribed_text) > 0:

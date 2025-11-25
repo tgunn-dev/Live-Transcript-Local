@@ -14,8 +14,8 @@ HAS_PYANNOTE = False
 try:
     from pyannote.audio import Pipeline
     HAS_PYANNOTE = True
-except ImportError:
-    print("⚠️ pyannote.audio not installed. Speaker diarization will be disabled.")
+except (ImportError, AttributeError) as e:
+    print(f"⚠️ pyannote.audio not available ({type(e).__name__}). Speaker diarization will be disabled.")
 
 # Global cache for diarization pipeline
 diarization_pipeline = None

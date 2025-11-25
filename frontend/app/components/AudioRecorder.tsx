@@ -31,7 +31,7 @@ export default function AudioRecorder({
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("default");
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
   const [captureMicWithSystem, setCaptureMicWithSystem] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>("whisper-base");
+  const [selectedModel, setSelectedModel] = useState<string>("parakeet-tdt-1.1b");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
