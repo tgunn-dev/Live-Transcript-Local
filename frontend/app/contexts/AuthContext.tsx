@@ -32,17 +32,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Load token from localStorage on mount
   useEffect(() => {
-    const savedToken = localStorage.getItem("auth_token");
-    if (savedToken) {
-      setToken(savedToken);
-      verifyTokenWithAPI(savedToken).then((valid) => {
-        if (!valid) {
-          localStorage.removeItem("auth_token");
-          setToken(null);
+    const initAuth = async () => {
+      try {
+        const savedToken = localStorage.getItem("auth_token");
+        if (savedToken) {
+          setToken(savedToken);
+          const valid = await verifyTokenWithAPI(savedToken);
+          if (!valid) {
+            localStorage.removeItem("auth_token");
+            setToken(null);
+          }
         }
-      });
-    }
-    setIsLoading(false);
+      } catch (error) {
+        console.error("Auth initialization error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   const login = async (googleToken: string) => {
@@ -74,6 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyTokenWithAPI = async (currentToken: string): Promise<boolean> => {
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
       const response = await axios.post(
         `${API_URL}/auth/verify-token`,
         {},
@@ -81,16 +92,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: {
             Authorization: `Bearer ${currentToken}`,
           },
+          signal: controller.signal,
         }
       );
+
+      clearTimeout(timeoutId);
 
       if (response.data.valid && response.data.user) {
         setUser(response.data.user);
         return true;
       }
       return false;
-    } catch (error) {
-      console.error("Token verification failed:", error);
+    } catch (error: any) {
+      if (error.code === 'ECONNABORTED') {
+        console.warn("Token verification timed out");
+      } else {
+        console.error("Token verification failed:", error.message);
+      }
       return false;
     }
   };
