@@ -94,6 +94,56 @@ except Exception as e:
         asr_model = None
 
 
+# Preload default Parakeet models on startup for faster transcription
+def preload_parakeet_models():
+    """Preload Parakeet models during startup to avoid delays on first request"""
+    if not HAS_PARRAKEET:
+        print("⚠️  Parakeet (nemo-toolkit) not available, skipping preload")
+        return
+
+    models_to_preload = [
+        ("parakeet-tdt-0.6b-v3", "nvidia/parakeet-tdt-0.6b-v3"),  # Default (fastest)
+        ("parakeet-tdt-1.1b", "nvidia/parakeet-tdt-1.1b"),  # Alternative (more accurate)
+    ]
+
+    try:
+        from nemo.collections.asr.models import ASRModel as _ASRModel
+        global ASRModel
+        ASRModel = _ASRModel
+
+        for model_key, full_model_name in models_to_preload:
+            if full_model_name in parakeet_model_cache:
+                print(f"✓ Parakeet model '{model_key}' already cached")
+                continue
+
+            try:
+                print(f"📥 Preloading Parakeet model: {model_key}...")
+                parakeet_model = _ASRModel.from_pretrained(full_model_name, refresh_cache=False)
+                parakeet_model.eval()
+
+                # Use GPU if available
+                if torch.cuda.is_available():
+                    parakeet_model = parakeet_model.cuda()
+                    print(f"✓ Parakeet '{model_key}' loaded on GPU")
+                else:
+                    print(f"✓ Parakeet '{model_key}' loaded on CPU")
+
+                parakeet_model_cache[full_model_name] = parakeet_model
+            except Exception as e:
+                print(f"⚠️  Could not preload '{model_key}': {e}")
+                print(f"    It will be loaded on first use instead")
+    except Exception as e:
+        print(f"⚠️  Parakeet preload failed: {e}")
+
+
+# Start preloading Parakeet models in background (non-blocking)
+print("\n📻 Checking for Parakeet models to preload...")
+try:
+    preload_parakeet_models()
+except Exception as e:
+    print(f"⚠️  Parakeet preload error: {e}")
+
+
 @app.get("/")
 async def root():
     return {"message": "Audio Transcriber API is running"}
