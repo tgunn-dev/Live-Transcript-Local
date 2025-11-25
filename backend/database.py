@@ -54,6 +54,7 @@ class Transcript(Base):
 def init_db():
     """Initialize database tables if they don't exist"""
     from sqlalchemy import inspect
+
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
 
@@ -61,6 +62,27 @@ def init_db():
     for table in Base.metadata.tables.values():
         if table.name not in existing_tables:
             table.create(bind=engine, checkfirst=True)
+
+    # For SQLite with existing transcripts table (backward compatibility)
+    # Check if user_id column exists and add it if needed
+    if "sqlite" in DATABASE_URL and "transcripts" in existing_tables:
+        try:
+            columns = [col.name for col in inspector.get_columns("transcripts")]
+            if "user_id" not in columns:
+                # Add user_id column to existing transcripts table
+                from sqlalchemy import text
+                db = SessionLocal()
+                try:
+                    db.execute(text('ALTER TABLE transcripts ADD COLUMN user_id TEXT'))
+                    db.commit()
+                    print("✓ Added user_id column to transcripts table", flush=True)
+                except Exception as col_error:
+                    db.rollback()
+                    print(f"⚠️ Could not add user_id column (may already exist): {col_error}", flush=True)
+                finally:
+                    db.close()
+        except Exception as e:
+            print(f"⚠️ Error checking transcripts schema: {e}", flush=True)
 
 # Try to initialize, but don't fail if it errors (another worker might be doing it)
 try:
