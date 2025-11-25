@@ -50,7 +50,25 @@ class Transcript(Base):
     user = relationship("User", back_populates="transcripts")
 
 
-Base.metadata.create_all(bind=engine)
+# Create tables safely - check if they exist first to avoid race conditions with multiple Gunicorn workers
+def init_db():
+    """Initialize database tables if they don't exist"""
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+
+    # Only create tables that don't exist
+    for table in Base.metadata.tables.values():
+        if table.name not in existing_tables:
+            table.create(bind=engine, checkfirst=True)
+
+# Try to initialize, but don't fail if it errors (another worker might be doing it)
+try:
+    init_db()
+except Exception as e:
+    # Log but don't fail - another worker might be initializing
+    import sys
+    print(f"⚠️ Note: Database initialization encountered: {e}", file=sys.stderr)
 
 
 def get_db():
