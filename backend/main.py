@@ -101,50 +101,20 @@ def preload_parakeet_models():
         print("⚠️  Parakeet (nemo-toolkit) not available, skipping preload")
         return
 
-    # Only preload the smaller 0.6b model to avoid OOM in Docker
-    # The 1.1b model will be lazy-loaded on first use if selected
-    models_to_preload = [
-        ("parakeet-tdt-0.6b-v3", "nvidia/parakeet-tdt-0.6b-v3"),  # Default (fastest, ~2.4GB)
-        # Note: 1.1b model (~4.5GB) is too large to preload alongside 0.6b and Whisper
-        # It will be loaded on-demand when user selects it
-    ]
-
-    try:
-        from nemo.collections.asr.models import ASRModel as _ASRModel
-        global ASRModel
-        ASRModel = _ASRModel
-
-        for model_key, full_model_name in models_to_preload:
-            if full_model_name in parakeet_model_cache:
-                print(f"✓ Parakeet model '{model_key}' already cached")
-                continue
-
-            try:
-                print(f"📥 Preloading Parakeet model: {model_key}...")
-                parakeet_model = _ASRModel.from_pretrained(full_model_name, refresh_cache=False)
-                parakeet_model.eval()
-
-                # Use GPU if available
-                if torch.cuda.is_available():
-                    parakeet_model = parakeet_model.cuda()
-                    print(f"✓ Parakeet '{model_key}' loaded on GPU")
-                else:
-                    print(f"✓ Parakeet '{model_key}' loaded on CPU")
-
-                parakeet_model_cache[full_model_name] = parakeet_model
-            except Exception as e:
-                print(f"⚠️  Could not preload '{model_key}': {e}")
-                print(f"    It will be loaded on first use instead")
-    except Exception as e:
-        print(f"⚠️  Parakeet preload failed: {e}")
+    # Note: Parakeet models are large (2.4GB+ per model) and can cause OOM in Docker
+    # Instead of preloading, we use lazy-loading: models are loaded on-demand when the user selects them
+    # This is more memory-efficient and works better in Docker environments with limited RAM
+    print("✓ Parakeet models will be lazy-loaded on first use (more Docker-friendly)")
 
 
-# Start preloading Parakeet models in background (non-blocking)
-print("\n📻 Checking for Parakeet models to preload...")
+# Print info about model loading strategy
+print("\n📻 Model Loading Strategy:")
+print("✓ Whisper (base) - Preloaded at startup")
+print("✓ Parakeet models - Lazy-loaded on first use (on-demand)")
 try:
     preload_parakeet_models()
 except Exception as e:
-    print(f"⚠️  Parakeet preload error: {e}")
+    print(f"⚠️  Parakeet info error: {e}")
 
 
 @app.get("/")
