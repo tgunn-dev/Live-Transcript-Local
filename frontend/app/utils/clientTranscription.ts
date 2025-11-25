@@ -111,10 +111,6 @@ export async function transcribeAudioChunk(audioBuffer: Float32Array, sampleRate
   }
 }
 
-export function isTranscriberReady(): boolean {
-  return transcriber !== null;
-}
-
 export async function unloadTranscriber() {
   transcriber = null;
   console.log("Transcriber unloaded");
