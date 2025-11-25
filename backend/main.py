@@ -99,10 +99,11 @@ async def root():
     return {"message": "Audio Transcriber API is running"}
 
 
-def resample_audio_to_16khz(audio_path: str) -> str:
+def resample_audio_to_16khz(audio_path: str) -> tuple[str, bool]:
     """
     Resample audio file to 16kHz (required by Parakeet)
-    Returns path to the resampled audio file
+    Returns tuple of (path_to_use, is_resampled)
+    If resampled=True, caller should delete the resampled file after use
     """
     import librosa
     import soundfile as sf
@@ -113,20 +114,21 @@ def resample_audio_to_16khz(audio_path: str) -> str:
 
         # If already 16kHz, return original path
         if sr == 16000:
-            return audio_path
+            return audio_path, False
 
         # Resample to 16kHz
         audio_16k = librosa.resample(audio, orig_sr=sr, target_sr=16000)
 
-        # Save to temporary file
-        resampled_path = audio_path.replace('.wav', '_16k.wav')
-        sf.write(resampled_path, audio_16k, 16000)
+        # Save to a proper temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+            resampled_path = tmp_file.name
 
-        print(f"🔄 Resampled audio from {sr}Hz to 16kHz")
-        return resampled_path
+        sf.write(resampled_path, audio_16k, 16000)
+        print(f"🔄 Resampled audio from {sr}Hz to 16kHz: {resampled_path}")
+        return resampled_path, True
     except Exception as e:
         print(f"⚠️  Resampling failed, trying original audio: {e}")
-        return audio_path
+        return audio_path, False
 
 
 def transcribe_with_parakeet(audio_path: str, model_name: str = "parakeet-1.1b-ctc-greedy") -> str:
@@ -194,11 +196,28 @@ def transcribe_with_parakeet(audio_path: str, model_name: str = "parakeet-1.1b-c
             # Don't print every time to reduce noise - only on first use
 
         # Resample audio to 16kHz (required by Parakeet)
-        audio_path_16k = resample_audio_to_16khz(audio_path)
+        audio_path_16k, is_resampled = resample_audio_to_16khz(audio_path)
 
-        # Transcribe
-        with torch.no_grad():
-            transcribed_text = parakeet_model.transcribe([audio_path_16k])
+        transcribed_text = None
+        try:
+            # Transcribe with timeout
+            print(f"📝 Transcribing with Parakeet model (this may take a moment)...")
+            with torch.no_grad():
+                transcribed_text = parakeet_model.transcribe([audio_path_16k])
+                print(f"✓ Parakeet transcription returned results")
+        except Exception as e:
+            print(f"❌ Parakeet transcription error: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
+        finally:
+            # Clean up resampled file if we created one
+            if is_resampled and os.path.exists(audio_path_16k):
+                try:
+                    os.remove(audio_path_16k)
+                    print(f"🧹 Cleaned up resampled audio file")
+                except Exception as e:
+                    print(f"⚠️  Could not delete resampled file: {e}")
         
         # Extract text from result (may be Hypothesis object or string)
         if transcribed_text and len(transcribed_text) > 0:

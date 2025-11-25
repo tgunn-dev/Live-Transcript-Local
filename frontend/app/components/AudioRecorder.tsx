@@ -31,7 +31,7 @@ export default function AudioRecorder({
   const [selectedAudioDevice, setSelectedAudioDevice] = useState<string>("default");
   const [captureSystemAudio, setCaptureSystemAudio] = useState(false);
   const [captureMicWithSystem, setCaptureMicWithSystem] = useState(true);
-  const [selectedModel, setSelectedModel] = useState<string>("parakeet-tdt-1.1b");
+  const [selectedModel, setSelectedModel] = useState<string>("parakeet-tdt-0.6b-v3");
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -645,54 +645,142 @@ export default function AudioRecorder({
 
       {/* Audio Device Selector */}
       {!captureSystemAudio && audioDevices.length > 0 && (
-        <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            🎤 Audio Input Device:
+        <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+          <label className="block text-sm font-semibold text-gray-800 mb-3">
+            🎤 Select Audio Input Device
           </label>
-          <select
-            value={selectedAudioDevice}
-            onChange={(e) => setSelectedAudioDevice(e.target.value)}
-            disabled={isRecording}
-            className="w-full p-2 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="default">Default Device</option>
-            {audioDevices.map((device) => (
-              <option key={device.deviceId} value={device.deviceId}>
-                {device.label || `Device: ${device.deviceId.substring(0, 10)}...`}
-              </option>
-            ))}
-          </select>
+          <div className="space-y-2">
+            {/* Default Device Option */}
+            <button
+              onClick={() => setSelectedAudioDevice("default")}
+              disabled={isRecording}
+              className={`w-full p-3 rounded-lg border-2 transition-all duration-200 text-left ${
+                selectedAudioDevice === "default"
+                  ? "border-blue-500 bg-blue-100 shadow-md"
+                  : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+              } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🎧</span>
+                  <div>
+                    <p className="font-medium text-gray-900">System Default</p>
+                    <p className="text-xs text-gray-600">Uses your primary audio device</p>
+                  </div>
+                </div>
+                {selectedAudioDevice === "default" && (
+                  <span className="text-blue-600 font-bold">✓</span>
+                )}
+              </div>
+            </button>
+
+            {/* Other Devices */}
+            {audioDevices.map((device) => {
+              const getDeviceIcon = (label: string) => {
+                if (label.toLowerCase().includes("headset")) return "🎧";
+                if (label.toLowerCase().includes("earphone")) return "🔊";
+                if (label.toLowerCase().includes("usb")) return "🔌";
+                if (label.toLowerCase().includes("virtual")) return "💻";
+                return "🎤";
+              };
+
+              const icon = getDeviceIcon(device.label || "");
+              return (
+                <button
+                  key={device.deviceId}
+                  onClick={() => setSelectedAudioDevice(device.deviceId)}
+                  disabled={isRecording}
+                  className={`w-full p-3 rounded-lg border-2 transition-all duration-200 text-left ${
+                    selectedAudioDevice === device.deviceId
+                      ? "border-blue-500 bg-blue-100 shadow-md"
+                      : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                  } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {device.label || "Unknown Device"}
+                        </p>
+                        <p className="text-xs text-gray-600 truncate">
+                          {device.deviceId.substring(0, 12)}...
+                        </p>
+                      </div>
+                    </div>
+                    {selectedAudioDevice === device.deviceId && (
+                      <span className="text-blue-600 font-bold ml-2">✓</span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       {/* Model Selection */}
-      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          🧠 Transcription Model:
+      <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
+        <label className="block text-sm font-semibold text-gray-800 mb-3">
+          🧠 Transcription Model
         </label>
+
+        {/* NVIDIA Parakeet Models - Primary Options */}
+        <p className="text-xs font-semibold text-purple-700 mb-2 uppercase">⚡ Recommended (NVIDIA Parakeet)</p>
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <button
+            onClick={() => setSelectedModel("parakeet-tdt-0.6b-v3")}
+            disabled={isRecording}
+            className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+              selectedModel === "parakeet-tdt-0.6b-v3"
+                ? "border-purple-500 bg-purple-100 shadow-md"
+                : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
+            } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div className="text-left">
+              <p className="font-bold text-gray-900 text-sm">0.6B V3 ⭐</p>
+              <p className="text-xs text-gray-600">Fastest</p>
+              {selectedModel === "parakeet-tdt-0.6b-v3" && (
+                <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
+              )}
+            </div>
+          </button>
+
+          <button
+            onClick={() => setSelectedModel("parakeet-tdt-1.1b")}
+            disabled={isRecording}
+            className={`p-3 rounded-lg border-2 transition-all duration-200 ${
+              selectedModel === "parakeet-tdt-1.1b"
+                ? "border-purple-500 bg-purple-100 shadow-md"
+                : "border-gray-200 bg-white hover:border-purple-300 hover:bg-purple-50"
+            } ${isRecording ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          >
+            <div className="text-left">
+              <p className="font-bold text-gray-900 text-sm">1.1B</p>
+              <p className="text-xs text-gray-600">More accurate</p>
+              {selectedModel === "parakeet-tdt-1.1b" && (
+                <p className="text-purple-600 font-bold mt-1">✓ Selected</p>
+              )}
+            </div>
+          </button>
+        </div>
+
+        {/* Alternative Models */}
+        <p className="text-xs font-semibold text-indigo-700 mb-2 uppercase">🤖 Alternatives</p>
         <select
           value={selectedModel}
           onChange={(e) => setSelectedModel(e.target.value)}
           disabled={isRecording}
-          className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+          className="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white"
         >
-          <optgroup label="OpenAI Whisper">
-            <option value="whisper-tiny">Whisper Tiny (Fastest, Less Accurate)</option>
-            <option value="whisper-base">Whisper Base (Balanced)</option>
-            <option value="whisper-small">Whisper Small (Better Accuracy)</option>
-            <option value="whisper-medium">Whisper Medium (High Accuracy)</option>
-            <option value="whisper-large">Whisper Large (Most Accurate)</option>
-          </optgroup>
-          <optgroup label="NVIDIA Parakeet (Fastest)">
-            <option value="parakeet-tdt-0.6b-v3">Parakeet TDT 0.6B V3 (Latest, Fastest, Best Quality) ⭐</option>
-            <option value="parakeet-tdt-1.1b">Parakeet TDT 1.1B (Larger, More Accurate)</option>
-            <option value="parakeet-ctc-0.6b">Parakeet CTC 0.6B (Original, Fast)</option>
-            <option value="parakeet-ctc-1.1b">Parakeet CTC 1.1B (Original, Better Quality)</option>
-          </optgroup>
+          <option value="parakeet-ctc-0.6b">Parakeet CTC 0.6B (older, faster)</option>
+          <option value="parakeet-ctc-1.1b">Parakeet CTC 1.1B (older, more accurate)</option>
+          <option value="whisper-tiny">Whisper Tiny (fastest, least accurate)</option>
+          <option value="whisper-base">Whisper Base (balanced)</option>
+          <option value="whisper-small">Whisper Small (better accuracy)</option>
+          <option value="whisper-medium">Whisper Medium (high accuracy)</option>
+          <option value="whisper-large">Whisper Large (most accurate, slowest)</option>
         </select>
-        <p className="text-xs text-gray-500 mt-2">
-          💡 Tip: Tiny is fast but less accurate. Large is accurate but slower. Base is a good balance.
-        </p>
       </div>
 
       {/* Info */}
