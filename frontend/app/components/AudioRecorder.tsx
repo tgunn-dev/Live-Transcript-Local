@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import axios from "axios";
+import { useAuth } from "@/app/contexts/AuthContext";
 import TranscriptMessages from "./TranscriptMessages";
 import { initializeTranscriber, transcribeAudio, transcribeAudioChunk, isTranscriberReady } from "@/app/utils/clientTranscription";
 
@@ -21,6 +22,7 @@ interface TranscriptMessage {
 export default function AudioRecorder({
   onTranscriptionComplete,
 }: AudioRecorderProps) {
+  const { token } = useAuth();
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [accumulatedTranscript, setAccumulatedTranscript] = useState("");
@@ -788,14 +790,18 @@ export default function AudioRecorder({
         formData.append("model", selectedModel);
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const headers: any = {
+          "Content-Type": "multipart/form-data",
+        };
+
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
         const response = await axios.post(
           `${apiUrl}/transcribe`,
           formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
+          { headers }
         );
 
         setTranscript(response.data.content);
@@ -811,21 +817,21 @@ export default function AudioRecorder({
 
   const saveTranscriptToServer = async (transcriptText: string) => {
     try {
-      const formData = new FormData();
-      formData.append("title", `Recording - ${new Date().toLocaleString()}`);
-      formData.append("content", transcriptText);
-
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+      const headers: any = {
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
 
       // Save to server for history (but don't require success)
       await axios.post(
         `${apiUrl}/save-transcript`,
         { title: `Recording - ${new Date().toLocaleString()}`, content: transcriptText },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
+        { headers }
       );
 
       console.log("✓ Transcript saved to server history");

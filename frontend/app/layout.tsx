@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AuthProvider } from "@/app/contexts/AuthContext";
 
 export const metadata: Metadata = {
   title: "Audio Transcriber",
@@ -13,7 +14,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50">{children}</body>
+      <body className="bg-gray-50">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { formatDistanceToNow } from "date-fns";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 // Helper function to format timestamp (seconds) as MM:SS
 const formatTimestamp = (seconds: number): string => {
@@ -29,18 +30,25 @@ interface Transcript {
 }
 
 export default function TranscriptHistory() {
+  const { token } = useAuth();
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchTranscripts();
-  }, []);
+  }, [token]);
 
   const fetchTranscripts = async () => {
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      const response = await axios.get(`${apiUrl}/transcripts`);
+      const headers: any = {};
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await axios.get(`${apiUrl}/transcripts`, { headers });
       setTranscripts(response.data);
     } catch (error) {
       console.error("Error fetching transcripts:", error);
@@ -54,7 +62,13 @@ export default function TranscriptHistory() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-      await axios.delete(`${apiUrl}/transcripts/${id}`);
+      const headers: any = {};
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      await axios.delete(`${apiUrl}/transcripts/${id}`, { headers });
       setTranscripts(transcripts.filter((t) => t.id !== id));
     } catch (error) {
       console.error("Error deleting transcript:", error);
