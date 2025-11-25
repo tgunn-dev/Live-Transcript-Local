@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import TranscriptMessages from "./TranscriptMessages";
-import { initializeTranscriber, transcribeAudio, isTranscriberReady } from "@/app/utils/clientTranscription";
+import { initializeTranscriber, transcribeAudio, transcribeAudioChunk, isTranscriberReady } from "@/app/utils/clientTranscription";
 
 interface AudioRecorderProps {
   onTranscriptionComplete: (transcript: string) => void;
@@ -253,7 +253,15 @@ export default function AudioRecorder({
       // Set the recording title for later saving
       recordingTitleRef.current = `Recording - ${new Date().toLocaleString()}`;
 
-      // Connect to WebSocket
+      // Check if using client-side transcription
+      if (useClientSideTranscription && isTranscriberReady()) {
+        console.log("🌐 Starting client-side live transcription");
+        startClientSideLiveTranscription(stream);
+        return;
+      }
+
+      // Fall back to server-side (WebSocket)
+      console.log("🔌 Starting server-side live transcription");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const wsProtocol = apiUrl.startsWith("https") ? "wss" : "ws";
       const wsHost = apiUrl.replace(/^https?:\/\//, "");
@@ -534,6 +542,125 @@ export default function AudioRecorder({
       console.error("Error starting live transcription:", error);
       setTranscript(`Error starting recording: ${error}`);
       setIsProcessing(false);
+    }
+  };
+
+  const startClientSideLiveTranscription = (stream: MediaStream) => {
+    try {
+      // Set up client-side live transcription with VAD
+      console.log("🎙️ Setting up client-side live transcription");
+
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+      let audioBuffer = new Float32Array(0);
+      let isCurrentlySpeaking = false;
+      let pauseFrames = 0;
+      let lastSentTranscriptionTime = Date.now();
+      const minPauseFramesForTranscription = 8;
+      const maxAudioDurationBeforeForceSend = 15 * audioContext.sampleRate;
+
+      const speechThreshold = -28;
+      const noiseThreshold = -40;
+
+      processor.onaudioprocess = async (event) => {
+        const inputData = event.inputBuffer.getChannelData(0);
+
+        // Calculate RMS (volume level)
+        let sum = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          sum += inputData[i] * inputData[i];
+        }
+        const rms = Math.sqrt(sum / inputData.length);
+        const db = 20 * Math.log10(rms + 1e-10);
+
+        // Accumulate audio
+        const newBuffer = new Float32Array(audioBuffer.length + inputData.length);
+        newBuffer.set(audioBuffer);
+        newBuffer.set(inputData, audioBuffer.length);
+        audioBuffer = newBuffer;
+
+        // Voice Activity Detection
+        if (!isCurrentlySpeaking) {
+          if (db > speechThreshold) {
+            isCurrentlySpeaking = true;
+            pauseFrames = 0;
+            console.log(`🎤 Speech detected at ${db.toFixed(1)}dB`);
+          }
+        } else {
+          if (db < noiseThreshold) {
+            pauseFrames++;
+
+            const bufferDurationSeconds = audioBuffer.length / audioContext.sampleRate;
+            const shouldSend =
+              (pauseFrames >= minPauseFramesForTranscription && bufferDurationSeconds > 1) ||
+              (pauseFrames >= 30 && bufferDurationSeconds > 0.5) ||
+              (audioBuffer.length > maxAudioDurationBeforeForceSend && bufferDurationSeconds > 5);
+
+            if (shouldSend && audioBuffer.length > 4096) {
+              // Transcribe this chunk on client
+              const int16Data = new Int16Array(audioBuffer.length);
+              for (let i = 0; i < audioBuffer.length; i++) {
+                let s = Math.max(-1, Math.min(1, audioBuffer[i]));
+                int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+              }
+
+              try {
+                const chunkText = await transcribeAudioChunk(new Float32Array(int16Data), audioContext.sampleRate);
+
+                if (chunkText) {
+                  // Add as message
+                  const newMessage: TranscriptMessage = {
+                    id: `msg-${Date.now()}-${Math.random()}`,
+                    text: chunkText,
+                    timestamp: new Date(),
+                    isPartial: false,
+                  };
+
+                  setMessages((prev) => [...prev, newMessage]);
+                  accumulatedTranscriptRef.current += (accumulatedTranscriptRef.current ? " " : "") + chunkText;
+                  setAccumulatedTranscript(accumulatedTranscriptRef.current);
+                  setTranscript(accumulatedTranscriptRef.current);
+
+                  console.log("✓ Transcribed chunk:", chunkText.substring(0, 50));
+                }
+              } catch (error) {
+                console.error("Error transcribing chunk:", error);
+              }
+
+              audioBuffer = new Float32Array(0);
+              pauseFrames = 0;
+              isCurrentlySpeaking = false;
+            }
+          } else if (db > speechThreshold) {
+            pauseFrames = 0;
+          }
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      mediaRecorderRef.current = {
+        stop: () => {
+          console.log("Stopping client-side live transcription");
+          source.disconnect();
+          processor.disconnect();
+          audioContext.close();
+          stream.getTracks().forEach((track) => track.stop());
+
+          // Final save to server for history
+          saveTranscriptToServer(accumulatedTranscriptRef.current);
+        },
+      } as any;
+
+      setIsRecording(true);
+      setRecordingTime(0);
+      setIsProcessing(false);
+    } catch (error) {
+      console.error("Error starting client-side live transcription:", error);
+      setTranscript(`Error: ${error}`);
     }
   };
 

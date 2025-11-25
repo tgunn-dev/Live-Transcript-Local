@@ -81,6 +81,40 @@ export function isTranscriberReady(): boolean {
   return transcriber !== null;
 }
 
+export async function transcribeAudioChunk(audioBuffer: Float32Array, sampleRate: number): Promise<string> {
+  /**
+   * Transcribe a chunk of audio (for streaming/live mode)
+   * Returns the transcription of just this chunk
+   */
+  if (!transcriber) {
+    throw new Error("Transcriber not initialized. Call initializeTranscriber first.");
+  }
+
+  try {
+    const durationSecs = (audioBuffer.length / sampleRate).toFixed(2);
+    console.log(`🎵 Transcribing chunk (${durationSecs}s)...`);
+
+    const result = await transcriber(audioBuffer, {
+      sampling_rate: sampleRate,
+      top_k: 0,
+      do_sample: false,
+    });
+
+    const text = (result.text || "").trim();
+    if (text) {
+      console.log("✓ Chunk transcribed:", text.substring(0, 80));
+    }
+    return text;
+  } catch (error) {
+    console.error("Chunk transcription error:", error);
+    throw error;
+  }
+}
+
+export function isTranscriberReady(): boolean {
+  return transcriber !== null;
+}
+
 export async function unloadTranscriber() {
   transcriber = null;
   console.log("Transcriber unloaded");
