@@ -26,8 +26,13 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
-    session_id = Column(String, unique=True, index=True)  # WebSocket session ID
+    email = Column(String, unique=True, index=True, nullable=False)  # Google OAuth email
+    name = Column(String, nullable=True)  # User's full name from Google
+    google_id = Column(String, unique=True, index=True, nullable=True)  # Google OAuth ID
+    hashed_password = Column(String, nullable=True)  # For future local password auth (nullable for Google OAuth users)
+    session_id = Column(String, unique=True, index=True, nullable=True)  # WebSocket session ID
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
 
     # Relationship
     transcripts = relationship("Transcript", back_populates="user")
