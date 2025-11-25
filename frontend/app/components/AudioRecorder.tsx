@@ -231,8 +231,10 @@ export default function AudioRecorder({
       recordingTitleRef.current = `Recording - ${new Date().toLocaleString()}`;
 
       // Connect to WebSocket
-      const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const wsUrl = `${wsProtocol}://${window.location.host.replace(":3001", ":8000")}/ws/transcribe`;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const wsProtocol = apiUrl.startsWith("https") ? "wss" : "ws";
+      const wsHost = apiUrl.replace(/^https?:\/\//, "");
+      const wsUrl = `${wsProtocol}://${wsHost}/ws/transcribe`;
 
       console.log("Attempting to connect to WebSocket:", wsUrl);
       const ws = new WebSocket(wsUrl);
@@ -556,8 +558,9 @@ export default function AudioRecorder({
       formData.append("title", `Recording - ${new Date().toLocaleString()}`);
       formData.append("model", selectedModel);
 
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
       const response = await axios.post(
-        "http://localhost:8000/transcribe",
+        `${apiUrl}/transcribe`,
         formData,
         {
           headers: {

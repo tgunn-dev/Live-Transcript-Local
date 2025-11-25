@@ -39,7 +39,8 @@ export default function TranscriptHistory() {
 
   const fetchTranscripts = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/transcripts");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const response = await axios.get(`${apiUrl}/transcripts`);
       setTranscripts(response.data);
     } catch (error) {
       console.error("Error fetching transcripts:", error);
@@ -52,7 +53,8 @@ export default function TranscriptHistory() {
     if (!confirm("Are you sure you want to delete this transcript?")) return;
 
     try {
-      await axios.delete(`http://localhost:8000/transcripts/${id}`);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      await axios.delete(`${apiUrl}/transcripts/${id}`);
       setTranscripts(transcripts.filter((t) => t.id !== id));
     } catch (error) {
       console.error("Error deleting transcript:", error);
