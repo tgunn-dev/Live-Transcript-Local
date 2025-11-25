@@ -1,8 +1,10 @@
-from fastapi import FastAPI, UploadFile, File, Depends, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, UploadFile, File, Depends, WebSocket, WebSocketDisconnect, Body, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthCredentials
 from sqlalchemy.orm import Session
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 import io
 import json
 import tempfile
@@ -27,8 +29,9 @@ try:
 except ImportError:
     print("⚠️  Parrakeet (nemo-toolkit) not installed. Run: pip install nemo-toolkit[asr]")
 
-from database import get_db, Transcript
-from schemas import TranscriptResponse, TranscriptionChunk
+from database import get_db, Transcript, User
+from schemas import TranscriptResponse, TranscriptionChunk, LoginRequest, LoginResponse, UserResponse
+from auth import create_access_token, verify_token, verify_google_token
 from speaker_diarization import (
     is_diarization_available,
     detect_speakers,
@@ -791,3 +794,106 @@ async def delete_transcript(transcript_id: int, db: Session = Depends(get_db)):
     db.delete(transcript)
     db.commit()
     return {"message": "Transcript deleted successfully"}
+
+
+# ==================== AUTHENTICATION ENDPOINTS ====================
+
+@app.post("/auth/login", response_model=LoginResponse)
+async def login_with_google(request: LoginRequest, db: Session = Depends(get_db)):
+    """
+    Login with Google OAuth token
+
+    Expects a Google OAuth ID token. Verifies the token and creates/updates user in database.
+    Returns a JWT access token for subsequent API calls.
+    """
+    # Verify Google token
+    google_user = verify_google_token(request.token)
+    if not google_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token"
+        )
+
+    email = google_user.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email not found in Google token"
+        )
+
+    # Find or create user
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        # Create new user from Google info
+        user = User(
+            email=email,
+            name=google_user.get("name"),
+            google_id=google_user.get("google_id"),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        print(f"✓ Created new user: {email}")
+    else:
+        # Update last_login for existing user
+        user.last_login = datetime.utcnow()
+        db.commit()
+        print(f"✓ User logged in: {email}")
+
+    # Create JWT token
+    access_token = create_access_token(email=user.email, user_id=user.id)
+
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user=UserResponse.from_orm(user)
+    )
+
+
+@app.post("/auth/verify-token")
+async def verify_access_token(credentials: HTTPAuthCredentials = Depends(HTTPBearer()), db: Session = Depends(get_db)):
+    """
+    Verify a JWT access token
+
+    Returns the token payload if valid, otherwise raises 401 Unauthorized.
+    """
+    token = credentials.credentials
+    payload = verify_token(token)
+
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+
+    # Verify user still exists
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    return {
+        "valid": True,
+        "email": payload.get("email"),
+        "user_id": payload.get("user_id"),
+        "user": UserResponse.from_orm(user)
+    }
+
+
+@app.post("/auth/logout")
+async def logout(credentials: HTTPAuthCredentials = Depends(HTTPBearer())):
+    """
+    Logout endpoint (mainly for client-side token cleanup)
+
+    The JWT token is stateless, so logout is handled client-side by deleting the token.
+    This endpoint exists for compatibility and to log logout events if needed.
+    """
+    token = credentials.credentials
+    payload = verify_token(token)
+
+    if payload:
+        print(f"✓ User logged out: {payload.get('email')}")
+
+    return {"message": "Logged out successfully"}
