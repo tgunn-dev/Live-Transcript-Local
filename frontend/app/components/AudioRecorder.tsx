@@ -557,12 +557,14 @@ export default function AudioRecorder({
       let audioBuffer = new Float32Array(0);
       let isCurrentlySpeaking = false;
       let pauseFrames = 0;
+      let speechFrames = 0;
       let lastSentTranscriptionTime = Date.now();
-      const minPauseFramesForTranscription = 8;
-      const maxAudioDurationBeforeForceSend = 15 * audioContext.sampleRate;
+      const minPauseFramesForTranscription = 5;  // Reduced from 8 for faster response
+      const minSpeechFramesBeforeSending = 10;    // Need at least ~0.4s of speech
+      const maxAudioDurationBeforeForceSend = 10 * audioContext.sampleRate;  // Send every ~10 seconds
 
-      const speechThreshold = -28;
-      const noiseThreshold = -40;
+      const speechThreshold = -35;  // More sensitive to normal speech
+      const noiseThreshold = -45;   // More strict silence detection
 
       processor.onaudioprocess = async (event) => {
         const inputData = event.inputBuffer.getChannelData(0);
@@ -586,17 +588,26 @@ export default function AudioRecorder({
           if (db > speechThreshold) {
             isCurrentlySpeaking = true;
             pauseFrames = 0;
+            speechFrames = 0;
             console.log(`🎤 Speech detected at ${db.toFixed(1)}dB`);
           }
         } else {
-          if (db < noiseThreshold) {
+          // Currently speaking - count speech frames
+          if (db > speechThreshold) {
+            speechFrames++;
+            pauseFrames = 0;
+          } else if (db < noiseThreshold) {
+            // Silence detected
             pauseFrames++;
 
             const bufferDurationSeconds = audioBuffer.length / audioContext.sampleRate;
+            const timeSinceLastSend = Date.now() - lastSentTranscriptionTime;
+
+            // Send if we have a pause after sufficient speech
             const shouldSend =
-              (pauseFrames >= minPauseFramesForTranscription && bufferDurationSeconds > 1) ||
-              (pauseFrames >= 30 && bufferDurationSeconds > 0.5) ||
-              (audioBuffer.length > maxAudioDurationBeforeForceSend && bufferDurationSeconds > 5);
+              (pauseFrames >= minPauseFramesForTranscription && speechFrames >= minSpeechFramesBeforeSending) ||
+              (audioBuffer.length > maxAudioDurationBeforeForceSend) ||
+              (timeSinceLastSend > 8000 && audioBuffer.length > 8192);  // Force send every 8 seconds
 
             if (shouldSend && audioBuffer.length > 4096) {
               // Transcribe this chunk on client
@@ -607,6 +618,7 @@ export default function AudioRecorder({
               }
 
               try {
+                console.log(`📤 Sending ${(audioBuffer.length / audioContext.sampleRate).toFixed(2)}s of audio for transcription...`);
                 const chunkText = await transcribeAudioChunk(new Float32Array(int16Data), audioContext.sampleRate);
 
                 if (chunkText) {
@@ -619,11 +631,22 @@ export default function AudioRecorder({
                   };
 
                   setMessages((prev) => [...prev, newMessage]);
-                  accumulatedTranscriptRef.current += (accumulatedTranscriptRef.current ? " " : "") + chunkText;
-                  setAccumulatedTranscript(accumulatedTranscriptRef.current);
-                  setTranscript(accumulatedTranscriptRef.current);
 
+                  // Update accumulated transcript with space separator
+                  const newAccumulated = accumulatedTranscriptRef.current
+                    ? accumulatedTranscriptRef.current + " " + chunkText
+                    : chunkText;
+                  accumulatedTranscriptRef.current = newAccumulated;
+                  setAccumulatedTranscript(newAccumulated);
+
+                  // Update full transcript display in real-time
+                  setTranscript(newAccumulated);
+
+                  lastSentTranscriptionTime = Date.now();
                   console.log("✓ Transcribed chunk:", chunkText.substring(0, 50));
+                  console.log("📝 Full transcript so far:", newAccumulated.substring(0, 100));
+                } else {
+                  console.log("⚠️ No speech detected in chunk");
                 }
               } catch (error) {
                 console.error("Error transcribing chunk:", error);
@@ -631,10 +654,13 @@ export default function AudioRecorder({
 
               audioBuffer = new Float32Array(0);
               pauseFrames = 0;
+              speechFrames = 0;
               isCurrentlySpeaking = false;
             }
-          } else if (db > speechThreshold) {
-            pauseFrames = 0;
+          } else {
+            // Ambiguous zone between speech and silence
+            pauseFrames++;
+            speechFrames++;
           }
         }
       };
