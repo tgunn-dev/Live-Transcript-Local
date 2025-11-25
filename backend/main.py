@@ -44,12 +44,13 @@ os.environ['CURL_CA_BUNDLE'] = ''
 
 app = FastAPI(title="Audio Transcriber API")
 
-# Thread pool for running CPU-intensive Whisper transcription without blocking
-# Increased to 3 to support multiple concurrent users
+# Thread pool for running CPU-intensive transcription without blocking
+# Increased to 6 to support multiple concurrent users (10+ simultaneous users)
 # Note: Each transcription is CPU-intensive, adjust based on your hardware
-# - CPU-only: 2-3 workers recommended
-# - With GPU: Can increase to 4-5 if GPU memory allows
-executor = ThreadPoolExecutor(max_workers=3)
+# - CPU-only: 4-6 workers recommended for 10+ concurrent users
+# - With GPU: Can increase to 8-10 if GPU memory allows
+# - Each Gunicorn worker gets its own thread pool
+executor = ThreadPoolExecutor(max_workers=6)
 
 # Cache for Parakeet models (key: model_name, value: model instance)
 parakeet_model_cache = {}
@@ -368,9 +369,28 @@ async def websocket_transcribe(websocket: WebSocket):
     """
     WebSocket endpoint for LIVE real-time transcription with Whisper.
     Client sends audio chunks, server transcribes periodically and sends partial results.
+    Multi-user capable - creates unique session per connection.
     """
     await websocket.accept()
-    print("✓ WebSocket client connected")
+
+    # Create unique user/session for this connection
+    import uuid as uuid_module
+    session_id = str(uuid_module.uuid4())
+    print(f"✓ WebSocket client connected (Session ID: {session_id[:8]}...)")
+
+    # Create user record for this session
+    from database import User
+    try:
+        user = User(session_id=session_id)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        user_id = user.id
+        print(f"  👤 User created: {user_id[:8]}...")
+    except Exception as e:
+        print(f"  ⚠️ Error creating user session: {e}")
+        user_id = None
+
     audio_buffer = io.BytesIO()
     last_transcribed_text = ""
     last_audio_length = 0  # Track how much audio we've already transcribed
@@ -632,6 +652,7 @@ async def websocket_transcribe(websocket: WebSocket):
                     print(f"   Segments: {len(transcript_segments)} with timestamps and speakers")
                 
                 db_transcript = Transcript(
+                    user_id=user_id,  # Associate with the user who recorded this
                     title=title,
                     content=final_transcript,  # Save the full accumulated transcript
                     duration=total_duration,

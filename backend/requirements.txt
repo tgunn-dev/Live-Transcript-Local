@@ -1,6 +1,7 @@
 Cython>=0.29.0
 fastapi>=0.100.0
 uvicorn>=0.24.0
+gunicorn>=21.2.0
 python-multipart>=0.0.6
 sqlalchemy>=2.0.20
 pydantic>=2.6.0
@@ -15,3 +16,5 @@ openai-whisper>=20231117
 nemo-toolkit[asr]>=1.22.0
 pyannote.audio>=3.0.0,<4.0
 huggingface-hub>=0.16.0
+psycopg2-binary>=2.9.0
+uuid6>=1.0.3

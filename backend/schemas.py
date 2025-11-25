@@ -15,6 +15,7 @@ class TranscriptCreate(TranscriptBase):
 
 class TranscriptResponse(TranscriptBase):
     id: int
+    user_id: str = None  # Track which user owns the transcript
     created_at: datetime
     segments: list[dict] = None  # List of segments with timestamps and speakers
 

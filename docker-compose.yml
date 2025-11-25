@@ -1,6 +1,23 @@
 version: '3.8'
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: parakeet-postgres
+    environment:
+      - POSTGRES_DB=parakeet
+      - POSTGRES_USER=parakeet
+      - POSTGRES_PASSWORD=parakeet_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parakeet -d parakeet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -9,12 +26,14 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite:///./transcripts.db
+      - DATABASE_URL=postgresql://parakeet:parakeet_password@postgres:5432/parakeet
       - PYTHONUNBUFFERED=1
     volumes:
       - ./backend:/app
-      - ./backend/transcripts.db:/app/transcripts.db
-    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000 --timeout 120
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
       interval: 60s
@@ -40,3 +59,6 @@ services:
       backend:
         condition: service_healthy
     command: npm start
+
+volumes:
+  postgres_data:
