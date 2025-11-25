@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, Depends, WebSocket, WebSocketDisconnect, Body, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer, HTTPAuthenticationCredentials
 from sqlalchemy.orm import Session
 import os
 from dotenv import load_dotenv
@@ -851,7 +851,7 @@ async def login_with_google(request: LoginRequest, db: Session = Depends(get_db)
 
 
 @app.post("/auth/verify-token")
-async def verify_access_token(credentials: HTTPAuthCredentials = Depends(HTTPBearer()), db: Session = Depends(get_db)):
+async def verify_access_token(credentials: HTTPAuthenticationCredentials = Depends(HTTPBearer()), db: Session = Depends(get_db)):
     """
     Verify a JWT access token
 
@@ -883,7 +883,7 @@ async def verify_access_token(credentials: HTTPAuthCredentials = Depends(HTTPBea
 
 
 @app.post("/auth/logout")
-async def logout(credentials: HTTPAuthCredentials = Depends(HTTPBearer())):
+async def logout(credentials: HTTPAuthenticationCredentials = Depends(HTTPBearer())):
     """
     Logout endpoint (mainly for client-side token cleanup)
 
