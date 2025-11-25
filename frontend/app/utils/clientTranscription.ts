@@ -4,15 +4,15 @@
  */
 
 let transcriber: any = null;
+let transformersLib: any = null;
 
-// Dynamically import only browser-compatible code
-async function importBrowserTransformers() {
+// Import transformers lazily to avoid server-side bundling issues
+async function loadTransformers() {
   try {
-    // Use dynamic import with module override to prevent Node.js backend from loading
-    const transformersLib = await import(
-      /* webpackIgnore: true */
-      "@xenova/transformers"
-    );
+    if (!transformersLib) {
+      // Lazy load at runtime to avoid build-time issues
+      transformersLib = await import("@xenova/transformers");
+    }
     return transformersLib;
   } catch (error) {
     console.error("Failed to import transformers:", error);
@@ -22,9 +22,9 @@ async function importBrowserTransformers() {
 
 export async function initializeTranscriber() {
   try {
-    // Only import the pipeline function to avoid Node.js dependencies
-    const transformersModule = await importBrowserTransformers();
-    const { pipeline } = transformersModule;
+    // Load transformers library
+    const lib = await loadTransformers();
+    const { pipeline } = lib;
 
     console.log("🔄 Loading Whisper Tiny model in browser (this may take 1-2 minutes on first load)...");
 

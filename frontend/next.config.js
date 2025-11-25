@@ -2,22 +2,22 @@
 const nextConfig = {
   reactStrictMode: true,
   webpack: (config, { isServer }) => {
-    // Suppress webpack warnings for onnxruntime-web critical dependency
+    // Suppress webpack warnings for onnxruntime critical dependency
     config.ignoreWarnings = (config.ignoreWarnings || []).concat([
       {
         module: /onnxruntime-web/,
         message: /Critical dependency/,
       },
       {
-        message: /vad\.worklet/,
-      },
-      {
         module: /onnxruntime-node/,
         message: /Critical dependency/,
       },
+      {
+        message: /vad\.worklet/,
+      },
     ])
 
-    // Add rule to suppress onnxruntime-web warnings at compilation level
+    // Add rule to suppress onnxruntime warnings at compilation level
     config.plugins = (config.plugins || []).concat([
       {
         apply: (compiler) => {
@@ -36,19 +36,25 @@ const nextConfig = {
       type: 'webassembly/async',
     })
 
-    // Exclude onnxruntime-node bindings from browser build (only used server-side)
+    // Exclude onnxruntime-node and native bindings from browser build
     if (!isServer) {
-      // Ignore .node files in browser bundle (Node.js native bindings)
+      // Ignore .node files (Node.js native bindings - not needed in browser)
       config.module.rules.push({
         test: /\.node$/,
         use: 'ignore-loader',
       })
 
-      // Also need to handle the onnxruntime-node module entirely
-      config.resolve.alias = {
-        ...config.resolve.alias,
+      // Fallback for onnxruntime-node module (use browser version instead)
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
         'onnxruntime-node': false,
       }
+    }
+
+    // Alias transformers.js to use WASM backend for browser
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@xenova/transformers': '@xenova/transformers/dist/transformers.js',
     }
 
     return config
