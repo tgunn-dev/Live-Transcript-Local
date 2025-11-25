@@ -101,9 +101,12 @@ def preload_parakeet_models():
         print("⚠️  Parakeet (nemo-toolkit) not available, skipping preload")
         return
 
+    # Only preload the smaller 0.6b model to avoid OOM in Docker
+    # The 1.1b model will be lazy-loaded on first use if selected
     models_to_preload = [
-        ("parakeet-tdt-0.6b-v3", "nvidia/parakeet-tdt-0.6b-v3"),  # Default (fastest)
-        ("parakeet-tdt-1.1b", "nvidia/parakeet-tdt-1.1b"),  # Alternative (more accurate)
+        ("parakeet-tdt-0.6b-v3", "nvidia/parakeet-tdt-0.6b-v3"),  # Default (fastest, ~2.4GB)
+        # Note: 1.1b model (~4.5GB) is too large to preload alongside 0.6b and Whisper
+        # It will be loaded on-demand when user selects it
     ]
 
     try:
